@@ -13,11 +13,18 @@ import android.os.Build;
 
 import com.facebook.common.logging.FLog;
 
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import okhttp3.ConnectionSpec;
 import okhttp3.OkHttpClient;
@@ -38,7 +45,7 @@ public class OkHttpClientProvider {
     }
     return sClient;
   }
-  
+
   // okhttp3 OkHttpClient is immutable
   // This allows app to init an OkHttpClient with custom settings.
   public static void replaceOkHttpClient(OkHttpClient client) {
@@ -47,13 +54,55 @@ public class OkHttpClientProvider {
 
   private static OkHttpClient createClient() {
     // No timeouts by default
-    OkHttpClient.Builder client = new OkHttpClient.Builder()
-      .connectTimeout(0, TimeUnit.MILLISECONDS)
-      .readTimeout(0, TimeUnit.MILLISECONDS)
-      .writeTimeout(0, TimeUnit.MILLISECONDS)
-      .cookieJar(new ReactCookieJarContainer());
+    OkHttpClient.Builder client = getUnsafeOkHttpClient()
+            .connectTimeout(0, TimeUnit.MILLISECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .writeTimeout(0, TimeUnit.MILLISECONDS)
+            .cookieJar(new ReactCookieJarContainer());
 
     return enableTls12OnPreLollipop(client).build();
+  }
+
+
+  private static OkHttpClient.Builder getUnsafeOkHttpClient() {
+    try {
+      // Create a trust manager that does not validate certificate chains
+      final TrustManager[] trustAllCerts = new TrustManager[]{
+              new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
+                }
+
+                @Override
+                public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
+                }
+
+                @Override
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                  return new java.security.cert.X509Certificate[]{};
+                }
+              }
+      };
+
+      // Install the all-trusting trust manager
+      final SSLContext sslContext = SSLContext.getInstance("SSL");
+      sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+      // Create an ssl socket factory with our all-trusting manager
+      final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+
+      OkHttpClient.Builder builder = new OkHttpClient.Builder();
+      builder.sslSocketFactory(sslSocketFactory);
+      builder.hostnameVerifier(new HostnameVerifier() {
+        @Override
+        public boolean verify(String hostname, SSLSession session) {
+          return true;
+        }
+      });
+
+      return builder;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /*
