@@ -33,7 +33,9 @@ import com.facebook.react.views.view.ReactViewBackgroundManager;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.HashMap;
 import javax.annotation.Nullable;
+
 
 /**
  * A simple subclass of ScrollView that doesn't dispatch measure and layout to its children and has
@@ -71,6 +73,7 @@ public class ReactScrollView extends ScrollView implements ReactClippingViewGrou
   private @Nullable List<Integer> mSnapOffsets;
   private View mContentView;
   private ReactViewBackgroundManager mReactBackgroundManager;
+  private HashMap<String, Integer> mContentOffset = null;
 
   public ReactScrollView(ReactContext context) {
     this(context, null);
@@ -175,10 +178,20 @@ public class ReactScrollView extends ScrollView implements ReactClippingViewGrou
         MeasureSpec.getSize(heightMeasureSpec));
   }
 
+  public void setContentOffset(HashMap<String, Integer> contentOffset) {
+    mContentOffset = contentOffset;
+  }
+
   @Override
   protected void onLayout(boolean changed, int l, int t, int r, int b) {
     // Call with the present values in order to re-layout if necessary
-    scrollTo(getScrollX(), getScrollY());
+    // If contentOffset is set scroll to its position
+    if (mContentOffset != null) {
+      scrollTo(mContentOffset.get("x"), mContentOffset.get("y"));
+    } else {
+      // Call with the present values in order to re-layout if necessary
+      scrollTo(getScrollX(), getScrollY());
+    }
   }
 
   @Override
