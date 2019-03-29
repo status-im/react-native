@@ -498,6 +498,14 @@ const TouchableMixin = {
    * Place as callback for a DOM element's `onResponderMove` event.
    */
   touchableHandleResponderMove: function(e: PressEvent) {
+    // Not enough time elapsed yet, wait for highlight -
+    // this is just a perf optimization.
+    if (
+      this.state.touchable.touchState === States.RESPONDER_INACTIVE_PRESS_IN
+    ) {
+      return;
+    }
+
     // Measurement may not have returned yet.
     if (!this.state.touchable.positionOnActivate) {
       return;
@@ -833,12 +841,7 @@ const TouchableMixin = {
       this._cancelLongPressDelayTimeout();
     }
 
-    const isInitialTransition =
-      curState === States.NOT_RESPONDER &&
-      nextState === States.RESPONDER_INACTIVE_PRESS_IN;
-
-    const isActiveTransition = !IsActive[curState] && IsActive[nextState];
-    if (isInitialTransition || isActiveTransition) {
+    if (!IsActive[curState] && IsActive[nextState]) {
       this._remeasureMetricsOnActivation();
     }
 
