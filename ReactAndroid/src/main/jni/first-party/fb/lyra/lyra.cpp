@@ -100,8 +100,7 @@ ostream& operator<<(ostream& out, const StackTraceElement& elm) {
     out << " func=" << elm.functionName() << "()+" << elm.functionOffset();
   }
 
-  out << " build-id=" << hex << setw(8) << 0
-      << "}";
+  out << "}";
 
   return out;
 }

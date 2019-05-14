@@ -26,9 +26,9 @@ NDK_MODULE_PATH := $(APP_MK_DIR)$(HOST_DIRSEP)$(THIRD_PARTY_NDK_DIR)$(HOST_DIRSE
 
 APP_STL := c++_shared
 
-# Make sure every shared lib includes a .note.gnu.build-id header
+# Make sure no shared lib includes a .note.gnu.build-id header
 APP_CFLAGS := -Wall -Werror
 APP_CPPFLAGS := -std=c++1y
-APP_LDFLAGS := -Wl,--build-id
+APP_LDFLAGS := -Wl,--build-id=none
 
 NDK_TOOLCHAIN_VERSION := clang
