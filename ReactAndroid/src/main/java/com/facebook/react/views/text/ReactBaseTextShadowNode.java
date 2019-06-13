@@ -6,6 +6,7 @@
  */
 package com.facebook.react.views.text;
 
+import java.util.function.Supplier;
 import android.annotation.TargetApi;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -120,6 +121,13 @@ public abstract class ReactBaseTextShadowNode extends LayoutShadowNode {
     }
     int end = sb.length();
     if (end >= start) {
+      // Markdown parsing has to be done before setting the font size
+      // because it uses `ReactAbsoluteTextSpan` to hide formatting characters.
+      // if text size is set to the whole string before that, it will
+      // override size for these hidden characters and they will be displayed.
+      // and colors.
+      addMarkdownParsing(textShadowNode, ops, sb);
+
       if (textShadowNode.mIsColorSet) {
         ops.add(new SetSpanOperation(start, end, new ReactForegroundColorSpan(textShadowNode.mColor)));
       }
@@ -138,6 +146,8 @@ public abstract class ReactBaseTextShadowNode extends LayoutShadowNode {
             new CustomLetterSpacingSpan(effectiveLetterSpacing)));
         }
       }
+
+
       int effectiveFontSize = textAttributes.getEffectiveFontSize();
       if (// `getEffectiveFontSize` always returns a value so don't need to check for anything like
           // `Float.NaN`.
@@ -192,6 +202,167 @@ public abstract class ReactBaseTextShadowNode extends LayoutShadowNode {
     }
   }
 
+  private static boolean isWhitespace(char character) {
+      if (character == '\u200b') {
+          return false;
+      }
+      return String.valueOf(character).trim().length() == 0;
+  }
+
+  private static boolean isControlChar(char character) {
+      return character == '*' || character == '`' || character == '_' || character == '\u200b';
+  }
+
+
+
+  protected static void parseMarkdownTag(String tag, 
+          SpannableStringBuilder sb, 
+          List<SetSpanOperation> ops, 
+          // codeZones mark where do we format stuff as "code", we won't apply any formatting there.
+          boolean[] codeZones, 
+          boolean isCode, 
+          Supplier<ReactSpan>... spans) {
+      final String content = sb.toString();
+
+      int tagBeginIndex = -1;
+
+      final boolean isMultilineCodeTag = tag.compareTo("```") == 0;
+
+      for (int i = 0; i < content.length() - tag.length(); i++) {
+          final String candidate = content.substring(i, i + tag.length());
+
+          final boolean followedByWhitespace = content.length() - i < tag.length() || isWhitespace(content.charAt(i + tag.length()));
+          final boolean followedByControlCharacter = content.length() - i < tag.length() || isControlChar(content.charAt(i + tag.length()));
+          final boolean preceededByWhitespace = i == 0 || isWhitespace(content.charAt(i - 1));
+          final boolean preceededByControlCharacter = i > 0 && isControlChar(content.charAt(i - 1));
+
+          if (candidate.compareTo(tag) == 0) {
+              if (tagBeginIndex < 0 && !codeZones[i] && (isMultilineCodeTag || !followedByWhitespace) && (preceededByWhitespace || preceededByControlCharacter) ) {
+                  tagBeginIndex = i;
+
+                  // make sure that ``` is the OUTERMOST tag as opposed to everything else
+                  if (isMultilineCodeTag) {
+                      i += tag.length() - 1;
+                  }
+
+              } else if (tagBeginIndex >= 0 && !codeZones[i]) {
+                  if (i - tagBeginIndex < 2) {
+                      if (!followedByWhitespace && !isMultilineCodeTag) {
+                          tagBeginIndex = i;
+                      } else {
+                          tagBeginIndex = -1;
+                      }
+                  } else if (followedByWhitespace || (!isMultilineCodeTag && followedByControlCharacter)) {
+                      hideCharacters(tagBeginIndex, tag.length(), sb);
+                      hideCharacters(i, tag.length(), sb);
+
+                      for (int j = 0; j < spans.length; j++) {
+                          ops.add(new SetSpanOperation(tagBeginIndex, i + tag.length(), spans[j].get()));
+                      }
+
+                      if (isCode) {
+                          for (int j = tagBeginIndex; j <= i; j++) {
+                              codeZones[j] = true;
+                          }
+                      }
+
+                      tagBeginIndex = -1;
+                  }
+              }
+              // line break stops all tags except ```
+          } else if (candidate.compareTo("\n") == 0 && !isMultilineCodeTag) {
+              tagBeginIndex = -1;
+          }
+      }
+  }
+
+  protected static void addMarkdownParsing(ReactBaseTextShadowNode textShadowNode, List<SetSpanOperation> ops, SpannableStringBuilder sb) {
+      if (!textShadowNode.mParseBasicMarkdown) {
+          return;
+      }
+
+      if (sb.toString().length() <= 0) {
+          return;
+      }
+
+      boolean[] codeZones = new boolean[sb.toString().length()];
+
+      parseMarkdownTag("```", sb, ops, codeZones, true,
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new ReactForegroundColorSpan(textShadowNode.mMarkdownCodeForegroundColor);
+                  }
+              },
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new ReactBackgroundColorSpan(textShadowNode.mMarkdownCodeBackgroundColor);
+                  }
+              },
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new CustomStyleSpan(
+                              textShadowNode.mFontStyle,
+                              textShadowNode.mFontWeight,
+                              "monospace",
+                              textShadowNode.getThemedContext().getAssets());
+                  }
+              });
+
+      parseMarkdownTag("`", sb, ops, codeZones, true, 
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new ReactForegroundColorSpan(textShadowNode.mMarkdownCodeForegroundColor);
+                  }
+              },
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new ReactBackgroundColorSpan(textShadowNode.mMarkdownCodeBackgroundColor);
+                  }
+              },
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new CustomStyleSpan(
+                              textShadowNode.mFontStyle,
+                              textShadowNode.mFontWeight,
+                              "monospace",
+                              textShadowNode.getThemedContext().getAssets());
+                  }
+              });
+
+      parseMarkdownTag("*", sb, ops, codeZones, false, 
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new CustomStyleSpan(
+                              textShadowNode.mFontStyle,
+                              Typeface.BOLD,
+                              textShadowNode.mFontFamily,
+                              textShadowNode.getThemedContext().getAssets());
+                  }});
+
+      parseMarkdownTag("_", sb, ops, codeZones, false, 
+              new Supplier<ReactSpan>() {
+                  public ReactSpan get() {
+                      return new CustomStyleSpan(
+                              Typeface.ITALIC,
+                              textShadowNode.mFontWeight,
+                              textShadowNode.mFontFamily,
+                              textShadowNode.getThemedContext().getAssets());
+                  }
+              });
+
+
+  }
+
+  protected static void hideCharacters(int index, int length, SpannableStringBuilder sb) {
+      // To keep internal consistency, we just replace control characters with
+      // zero-width spaces. They won't be visible at all, but the number of
+      // chars will stay the same
+      for (int i = index; i < index + length; i++) {
+          sb.replace(i, i + 1, "\u200b");
+      }
+  }
+
+
   protected static Spannable spannedFromShadowNode(
       ReactBaseTextShadowNode textShadowNode, String text) {
     SpannableStringBuilder sb = new SpannableStringBuilder();
@@ -213,6 +384,7 @@ public abstract class ReactBaseTextShadowNode extends LayoutShadowNode {
 
     textShadowNode.mContainsImages = false;
     float heightOfTallestInlineImage = Float.NaN;
+
 
     // While setting the Spans on the final text, we also check whether any of them are images.
     int priority = 0;
@@ -306,6 +478,9 @@ public abstract class ReactBaseTextShadowNode extends LayoutShadowNode {
 
   protected boolean mContainsImages = false;
   protected float mHeightOfTallestInlineImage = Float.NaN;
+  protected boolean mParseBasicMarkdown = false;
+  protected int mMarkdownCodeForegroundColor = Color.BLACK;
+  protected int mMarkdownCodeBackgroundColor = Color.WHITE;
 
   public ReactBaseTextShadowNode() {
     mTextAttributes = new TextAttributes();
@@ -552,5 +727,26 @@ public abstract class ReactBaseTextShadowNode extends LayoutShadowNode {
       throw new JSApplicationIllegalArgumentException("Invalid textTransform: " + textTransform);
     }
     markUpdated();
+  }
+
+  @ReactProp(name = "parseBasicMarkdown")
+  public void setParseBasicMarkdown(boolean parseBasicMarkdown) {
+    mParseBasicMarkdown = parseBasicMarkdown;
+  }
+
+  @ReactProp(name = "markdownCodeBackgroundColor", defaultInt = Color.WHITE, customType = "Color")
+  public void setMarkdownCodeBackgroundColor(int markdownCodeBackgroundColor) {
+    if (markdownCodeBackgroundColor != mMarkdownCodeBackgroundColor) {
+        mMarkdownCodeBackgroundColor = markdownCodeBackgroundColor;
+        markUpdated();
+    }
+  }
+
+  @ReactProp(name = "markdownCodeForegroundColor", defaultInt = Color.BLACK, customType = "Color")
+  public void setMarkdownCodeForegroundColor(int markdownCodeForegroundColor) {
+    if (markdownCodeForegroundColor != mMarkdownCodeForegroundColor) {
+        mMarkdownCodeForegroundColor = markdownCodeForegroundColor;
+        markUpdated();
+    }
   }
 }

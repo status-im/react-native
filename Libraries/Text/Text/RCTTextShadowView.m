@@ -166,6 +166,190 @@
   [attributedText addAttribute:NSBaselineOffsetAttributeName
                          value:@(baseLineOffset)
                          range:NSMakeRange(0, attributedText.length)];
+
+  if (!_parseBasicMarkdown) {
+    return;
+  }
+
+  UIFontDescriptorSymbolicTraits traitZones[attributedText.string.length];
+  for (int i = 0; i < attributedText.string.length; i++) {
+    traitZones[i] = 0;
+  }
+
+  [self parseMarkdownTag:@"```"
+                  inText:attributedText
+              fontTraits:UIFontDescriptorTraitMonoSpace
+                 fgColor:self.markdownCodeForegroundColor
+                 bgColor:self.markdownCodeBackgroundColor
+               codeZones:traitZones];
+
+  [self parseMarkdownTag:@"`"
+                  inText:attributedText
+              fontTraits:UIFontDescriptorTraitMonoSpace
+                 fgColor:self.markdownCodeForegroundColor
+                 bgColor:self.markdownCodeBackgroundColor
+               codeZones:traitZones];
+
+  [self parseMarkdownTag:@"*"
+                  inText:attributedText
+              fontTraits:UIFontDescriptorTraitBold
+                 fgColor:nil
+                 bgColor:nil
+               codeZones:traitZones];
+
+  [self parseMarkdownTag:@"_"
+                  inText:attributedText
+              fontTraits:UIFontDescriptorTraitItalic
+                 fgColor:nil
+                 bgColor:nil
+              codeZones:traitZones];
+}
+
+
+- (UIFont *)fontWithTraits:(UIFontDescriptorSymbolicTraits)traits fromFont:(UIFont *)font
+{
+  if (traits == UIFontDescriptorTraitMonoSpace) {
+    return [UIFont fontWithName:@"Menlo" size:font.pointSize];
+  }
+
+  UIFontDescriptor *descriptor = [font.fontDescriptor fontDescriptorWithSymbolicTraits:font.fontDescriptor.symbolicTraits|traits];
+  if (!descriptor) {
+    return font;
+  }
+  return [UIFont fontWithDescriptor:descriptor size:font.pointSize];
+}
+
+-(bool)isWhitespaceOrControlCharacter:(unichar)character {
+  return character == ' ' ||
+    character == '\n' ||
+    character == [@"\u200B" characterAtIndex:0] ||
+    character == '_' ||
+    character == '*' ||
+    character == '`';
+}
+
+-(void)applyFontAttributeToString:(NSMutableAttributedString *)attributedText
+                          inRange:(NSRange)range
+                       fontTraits:(UIFontDescriptorSymbolicTraits)fontTraits
+                        allTraits:(UIFontDescriptorSymbolicTraits *)allTraits {
+  UIFont *font = [attributedText attribute:NSFontAttributeName atIndex:range.location effectiveRange:nil];
+  if (!font) {
+    font = [UIFont systemFontOfSize:18];
+  }
+
+  UIFontDescriptorSymbolicTraits prevTraits = allTraits[range.location];
+  NSInteger rangeStart = range.location;
+  for (NSUInteger i = range.location; i < range.location + range.length; i++) {
+    UIFontDescriptorSymbolicTraits currentTraits = allTraits[i];
+    if (currentTraits != prevTraits) {
+      NSRange subrange = NSMakeRange(rangeStart, i - rangeStart);
+      [self applyTraitsToSubrangeOfString:attributedText
+                                 subrange:subrange
+                               prevTraits:prevTraits
+                                     font:font
+                           incomingTraits:fontTraits];
+
+      prevTraits = currentTraits;
+      rangeStart = i;
+    }
+  }
+  NSRange subrange = NSMakeRange(rangeStart, range.location + range.length - rangeStart);
+
+  [self applyTraitsToSubrangeOfString:attributedText
+                             subrange:subrange
+                           prevTraits:prevTraits
+                                 font:font
+                       incomingTraits:fontTraits];
+}
+
+-(void)applyTraitsToSubrangeOfString:(NSMutableAttributedString *)attributedText
+                            subrange:(NSRange)subrange
+                          prevTraits:(UIFontDescriptorSymbolicTraits)prevTraits
+                                font:(UIFont *)font
+                      incomingTraits:(UIFontDescriptorSymbolicTraits)incomingTraits
+{
+  // don't override monospace, ever
+  UIFontDescriptorSymbolicTraits traitsToApply =
+    prevTraits & UIFontDescriptorTraitMonoSpace ? prevTraits : prevTraits|incomingTraits;
+  font = [self fontWithTraits:traitsToApply fromFont:font];
+  [attributedText addAttribute:NSFontAttributeName value:font range:subrange];
+}
+
+-(void)parseMarkdownTag:(NSString *)tag
+                 inText:(NSMutableAttributedString *)attributedText
+             fontTraits:(UIFontDescriptorSymbolicTraits)traits
+                fgColor:(UIColor *)fgColor
+                bgColor:(UIColor *)bgColor
+              codeZones:(UIFontDescriptorSymbolicTraits *)codeZones
+{
+  NSInteger start = NSNotFound;
+  bool multilineCodeTag = [tag isEqualToString:@"```"];
+
+  for (NSInteger i = 0; i < attributedText.string.length - tag.length; i++) {
+
+    NSString *candidate = [attributedText.string substringWithRange:NSMakeRange(i, tag.length)];
+
+    bool isInCodeZone = codeZones[i] & UIFontDescriptorTraitMonoSpace;
+
+    if ([candidate isEqualToString:tag]) {
+      unichar nextCharacter = [attributedText.string characterAtIndex:i+tag.length];
+      bool followedByWhitespace = nextCharacter == ' ' || nextCharacter == '\n';
+      bool followedByControlCharacter = [self isWhitespaceOrControlCharacter:nextCharacter];
+
+      bool preceededByWhitespaceOrControlCharacter = i == 0 || [self isWhitespaceOrControlCharacter:[attributedText.string characterAtIndex:i - 1]];
+
+      if (start == NSNotFound && !isInCodeZone) {
+        if (attributedText.string.length - i > tag.length) {
+          if ((!followedByWhitespace || multilineCodeTag) && preceededByWhitespaceOrControlCharacter) {
+            start = i;
+
+            // the ``` tag needs to be outermost
+            if (multilineCodeTag) {
+              i += tag.length - 1;
+            }
+          }
+        }
+      } else if(start != NSNotFound && !isInCodeZone) {
+        if (i - start < 2) {
+          // multilineCodeTag should be outermost
+          if(!followedByWhitespace && !multilineCodeTag) {
+            start = i;
+          } else {
+            start = NSNotFound;
+          }
+        } else if(followedByWhitespace || (!multilineCodeTag && followedByControlCharacter)) {
+          NSRange range = NSMakeRange(start, i-start+tag.length);
+          // iOS doesn't support merging font traits natively, so we are doing it manually here
+          [self applyFontAttributeToString:attributedText inRange:range fontTraits:traits allTraits:codeZones];
+
+          if (fgColor) {
+            [attributedText addAttribute:NSForegroundColorAttributeName value:fgColor range:range];
+          }
+
+          if (bgColor) {
+            [attributedText addAttribute:NSBackgroundColorAttributeName value:bgColor range:range];
+          }
+
+          // replacing control characters with 0-width spaces to hide them
+          NSString *replacement = @"";
+          for (int j = 0; j < tag.length; j++) {
+            replacement = [replacement stringByAppendingString:@"\u200B"];
+          }
+          [attributedText replaceCharactersInRange:NSMakeRange(i, tag.length) withString:replacement];
+          [attributedText replaceCharactersInRange:NSMakeRange(start, tag.length) withString:replacement];
+
+          for (NSInteger j = start; j < i + tag.length; j++) {
+            codeZones[j] |= traits;
+          }
+
+          start = NSNotFound;
+        }
+      }
+    } else if ([candidate isEqualToString:@"\n"] && !multilineCodeTag) {
+      // resetting tags on line breaks (except ```)
+      start = NSNotFound;
+    }
+  }
 }
 
 - (NSAttributedString *)attributedTextWithMeasuredAttachmentsThatFitSize:(CGSize)size

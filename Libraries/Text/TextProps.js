@@ -183,4 +183,9 @@ export type TextProps = $ReadOnly<{|
    * See https://facebook.github.io/react-native/docs/text.html#supperhighlighting
    */
   suppressHighlighting?: ?boolean,
+
+  parseBasicMarkdown?: ?boolean,
+
+  markdownCodeBackgroundColor?: ?string,
+  markdownCodeForegroundColor?: ?string,
 |}>;

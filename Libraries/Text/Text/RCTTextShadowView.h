@@ -20,6 +20,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) BOOL adjustsFontSizeToFit;
 @property (nonatomic, assign) CGFloat minimumFontScale;
 @property (nonatomic, copy) RCTDirectEventBlock onTextLayout;
+@property (nonatomic, assign) BOOL parseBasicMarkdown;
+@property (atomic, copy) UIColor* markdownCodeBackgroundColor;
+@property (atomic, copy) UIColor* markdownCodeForegroundColor;
+
 
 - (void)uiManagerWillPerformMounting;
 

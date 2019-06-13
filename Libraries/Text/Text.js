@@ -61,6 +61,9 @@ const viewConfig = {
     maxFontSizeMultiplier: true,
     disabled: true,
     selectable: true,
+    parseBasicMarkdown: true,
+    markdownCodeBackgroundColor: true,
+    markdownCodeForegroundColor: true,
     selectionColor: true,
     adjustsFontSizeToFit: true,
     minimumFontScale: true,
@@ -134,6 +137,18 @@ class TouchableText extends React.Component<Props, State> {
       props = {
         ...props,
         selectionColor: processColor(props.selectionColor),
+      };
+    }
+    if (props.markdownCodeBackgroundColor != null) {
+      props = {
+        ...props,
+        markdownCodeBackgroundColor: processColor(props.markdownCodeBackgroundColor),
+      };
+    }
+    if (props.markdownCodeForegroundColor != null) {
+      props = {
+        ...props,
+        markdownCodeForegroundColor: processColor(props.markdownCodeForegroundColor),
       };
     }
     if (__DEV__) {
