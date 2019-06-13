@@ -37,6 +37,11 @@ RCT_EXPORT_SHADOW_PROPERTY(onTextLayout, RCTDirectEventBlock)
 
 RCT_EXPORT_VIEW_PROPERTY(selectable, BOOL)
 
+RCT_EXPORT_SHADOW_PROPERTY(parseBasicMarkdown, BOOL)
+RCT_EXPORT_SHADOW_PROPERTY(markdownCodeBackgroundColor, UIColor)
+RCT_EXPORT_SHADOW_PROPERTY(markdownCodeForegroundColor, UIColor)
+
+
 - (void)setBridge:(RCTBridge *)bridge
 {
   [super setBridge:bridge];

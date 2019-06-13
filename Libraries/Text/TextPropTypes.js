@@ -132,4 +132,9 @@ module.exports = {
    * See https://facebook.github.io/react-native/docs/text.html#disabled
    */
   disabled: PropTypes.bool,
+
+  parseBasicMarkdown: PropTypes.bool,
+
+  markdownCodeBackgroundColor: DeprecatedColorPropType,
+  markdownCodeForegroundColor: DeprecatedColorPropType,
 };
