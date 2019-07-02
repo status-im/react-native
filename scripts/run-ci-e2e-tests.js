@@ -110,7 +110,7 @@ try {
       tryExecNTimes(
         () =>
           exec(
-            'yarn add --dev appium@1.5.1 mocha@2.4.5 wd@0.3.11 colors@1.0.3 pretty-data2@0.40.1',
+            'yarn add --dev appium@1.13.0 mocha@2.4.5 wd@0.3.11 colors@1.0.3 pretty-data2@0.40.1',
             {silent: true},
           ).code,
         numberOfRetries,

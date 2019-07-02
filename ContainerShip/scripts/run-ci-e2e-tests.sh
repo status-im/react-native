@@ -19,7 +19,7 @@ RUN_JS=0
 
 RETRY_COUNT=${RETRY_COUNT:-2}
 AVD_UUID=$(< /dev/urandom tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
-ANDROID_NPM_DEPS="appium@1.5.1 mocha@2.4.5 wd@0.3.11 colors@1.0.3 pretty-data2@0.40.1"
+ANDROID_NPM_DEPS="appium@1.13.0 mocha@2.4.5 wd@0.3.11 colors@1.0.3 pretty-data2@0.40.1"
 CLI_PACKAGE="$ROOT/react-native-cli/react-native-cli-*.tgz"
 PACKAGE="$ROOT/react-native-*.tgz"
 # Version of react-native-dummy to test against

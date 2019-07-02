@@ -11,7 +11,7 @@
  *
  *
  * To set up:
- * - npm install --save-dev appium@1.5.1 mocha@2.4.5 wd@0.3.11 colors@1.0.3 pretty-data2@0.40.1
+ * - npm install --save-dev appium@1.13.0 mocha@2.4.5 wd@0.3.11 colors@1.0.3 pretty-data2@0.40.1
  * - cp <this file> <to app installation path>
  * - keytool -genkey -v -keystore android/keystores/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US
  *
